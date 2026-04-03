@@ -20,7 +20,7 @@
 
 ### 👤 박다현
 - Yesterday:
-- Today:
+- Today: BERT, CRF 이해 및 코드 구현
 - Blocker:
 
 ---
