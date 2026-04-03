@@ -36,6 +36,7 @@ Evaluation Metric: Precision / Recall / F1 / Accuracy (seqeval)
 | 3     | 0.8494     |
 | 4     | 0.8536     |
 | 5     | **0.8549** |
+
 👉 Epoch 증가에 따라 안정적으로 성능 향상
 
 ## 🔹 Analysis
