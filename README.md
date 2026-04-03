@@ -11,32 +11,60 @@ KLUE NER 기반 다양한 NER 모델 성능 비교 프로젝트
 특히 다음과 같은 접근 방식의 차이를 실험합니다:
 
 Token Classification 기반 (BERT, CRF)
+
 Span-based 방식 (GlobalPointer)
+
 Label-conditioned / Generative NER (GLiNER)
+
+
 🎯 Objectives
+
 KLUE NER 데이터셋을 기반으로 다양한 모델 성능 비교
+
 BIO tagging vs Span-based 접근 방식 비교
+
 모델 구조에 따른 성능 및 특징 분석
+
 추가 데이터셋을 통한 일반화 성능 검증
+
 📂 Dataset
+
 ✅ Main Dataset
+
 KLUE NER dataset
+
 약 26K 문장 규모
+
 Character-level BIO tagging
+
 Entity Types:
+
 DT (Date)
+
 LC (Location)
+
 OG (Organization)
+
 PS (Person)
+
 QT (Quantity)
+
 TI (Time)
+
 ➕ Additional Dataset (for generalization)
+
 kor-ner-spacy-data
+
 corpus4everyone-klue-korean-NER
+
 🤖 Models
+
 🔹 Backbone
+
 klue/bert-base (Baseline)
+
 🔹 Model Variants
+
 | Model                    | Description                       |
 | ------------------------ | --------------------------------- |
 | **BERT (Baseline)**      | Token classification 기반           |
