@@ -102,29 +102,57 @@ BIO → 문자 기반 span 변환
 | Evaluation / Comparison        | 허태희(팀장) |
 
 📊 Evaluation
+
 Metric: F1 Score (Entity-level)
+
 추가 지표:
+
 Precision
+
 Recall
+
 🔍 Key Research Questions
+
 BIO tagging vs Span-based 방식 중 어떤 것이 더 효과적인가?
+
 GlobalPointer는 CRF보다 성능이 좋은가?
+
 GLiNER는 zero-shot/generalization에서 강점을 가지는가?
+
+
 한국어 NER에서 span 방식이 더 유리한가?
+
 🚀 Expected Contributions
+
 한국어 NER 모델 구조별 성능 비교
+
 다양한 접근 방식(Token vs Span vs Generative) 분석
+
 실무 적용 관점에서의 모델 선택 가이드 제공
+
 📌 Future Work
+
 LLM 기반 NER (GPT-NER, instruction tuning)
+
 Multi-task learning (NER + RE)
+
 Domain-specific NER 확장
+
 🛠️ Tech Stack
+
 Python
+
 PyTorch
+
 Hugging Face Transformers / Datasets
+
 sklearn (evaluation)
+
 CUDA / GPU
+
 ⭐ Notes
+
 KLUE dataset 기반으로 실험 수행
+
 모델별 공정한 비교를 위해 동일한 split 및 평가 기준 사용
+
