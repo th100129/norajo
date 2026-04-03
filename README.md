@@ -1,9 +1,9 @@
-한국어 NER에서 Token vs Span vs Generative 접근 방식을 비교 분석하는 실험 프로젝트
+#한국어 NER에서 Token vs Span vs Generative 접근 방식을 비교 분석하는 실험 프로젝트
 
 KLUE NER 기반 다양한 NER 모델 성능 비교 프로젝트
 (Token-level vs Span-level vs Generative NER)
 
-📌 Overview
+##📌 Overview
 
 본 프로젝트는 한국어 NER(Named Entity Recognition) 태스크에서
 서로 다른 구조의 모델들을 비교 분석하는 것을 목표로 합니다.
@@ -17,7 +17,7 @@ Span-based 방식 (GlobalPointer)
 Label-conditioned / Generative NER (GLiNER)
 
 
-🎯 Objectives
+##🎯 Objectives
 
 KLUE NER 데이터셋을 기반으로 다양한 모델 성능 비교
 
@@ -27,9 +27,9 @@ BIO tagging vs Span-based 접근 방식 비교
 
 추가 데이터셋을 통한 일반화 성능 검증
 
-📂 Dataset
+##📂 Dataset
 
-✅ Main Dataset
+##✅ Main Dataset
 
 KLUE NER dataset
 
@@ -51,19 +51,19 @@ QT (Quantity)
 
 TI (Time)
 
-➕ Additional Dataset (for generalization)
+##➕ Additional Dataset (for generalization)
 
 kor-ner-spacy-data
 
 corpus4everyone-klue-korean-NER
 
-🤖 Models
+##🤖 Models
 
-🔹 Backbone
+###🔹 Backbone
 
 klue/bert-base (Baseline)
 
-🔹 Model Variants
+###🔹 Model Variants
 
 | Model                    | Description                       |
 | ------------------------ | --------------------------------- |
@@ -74,7 +74,7 @@ klue/bert-base (Baseline)
 | **GLiNER**               | Label-conditioned span prediction |
 | **SpaCy (optional)**     | Rule + statistical baseline       |
 
-🏗️ Architecture
+##🏗️ Architecture
 [KLUE Dataset]
       ↓
 [Preprocessing]
@@ -91,17 +91,17 @@ klue/bert-base (Baseline)
       ↓
 [Additional Dataset Experiments]
 
-⚙️ Preprocessing
+##⚙️ Preprocessing
 
 KLUE NER 데이터는 기본적으로 BIO tagging 기반이므로
 모델별로 다른 전처리가 필요합니다.
 
-✔ Token-based (BERT, CRF)
+###✔ Token-based (BERT, CRF)
 tokens + ner_tags 그대로 사용
-✔ Span-based (GlobalPointer)
+###✔ Span-based (GlobalPointer)
 BIO → (start, end, label) 변환
 Token index 기준 span 생성
-✔ GLiNER
+###✔ GLiNER
 BIO → 문자 기반 span 변환
 입력 형태:
 {
@@ -110,7 +110,7 @@ BIO → 문자 기반 span 변환
   "entities": [{"start": 0, "end": 3, "label": "PS"}]
 }
 
-🧩 Modules
+##🧩 Modules
 | Module             | Description             |
 | ------------------ | ----------------------- |
 | **Span Generator** | BIO → span 변환           |
@@ -120,7 +120,7 @@ BIO → 문자 기반 span 변환
 | **Evaluator**      | Precision / Recall / F1 |
 | **Comparison**     | 모델 간 성능 비교              |
 
-👥 Team
+##👥 Team
 | Role                           | 담당 |
 | ------------------------------ | -- |
 | Preprocessing (Span Generator) | 김경훈 |
@@ -129,17 +129,17 @@ BIO → 문자 기반 span 변환
 | GLiNER                         | 김인하 |
 | Evaluation / Comparison        | 허태희(팀장) |
 
-📊 Evaluation
+##📊 Evaluation
 
 Metric: F1 Score (Entity-level)
 
-추가 지표:
+##추가 지표:
 
 Precision
 
 Recall
 
-🔍 Key Research Questions
+##🔍 Key Research Questions
 
 BIO tagging vs Span-based 방식 중 어떤 것이 더 효과적인가?
 
@@ -148,9 +148,9 @@ GlobalPointer는 CRF보다 성능이 좋은가?
 GLiNER는 zero-shot/generalization에서 강점을 가지는가?
 
 
-한국어 NER에서 span 방식이 더 유리한가?
+##한국어 NER에서 span 방식이 더 유리한가?
 
-🚀 Expected Contributions
+##🚀 Expected Contributions
 
 한국어 NER 모델 구조별 성능 비교
 
@@ -158,7 +158,7 @@ GLiNER는 zero-shot/generalization에서 강점을 가지는가?
 
 실무 적용 관점에서의 모델 선택 가이드 제공
 
-📌 Future Work
+##📌 Future Work
 
 LLM 기반 NER (GPT-NER, instruction tuning)
 
@@ -166,7 +166,7 @@ Multi-task learning (NER + RE)
 
 Domain-specific NER 확장
 
-🛠️ Tech Stack
+##🛠️ Tech Stack
 
 Python
 
@@ -178,7 +178,7 @@ sklearn (evaluation)
 
 CUDA / GPU
 
-⭐ Notes
+##⭐ Notes
 
 KLUE dataset 기반으로 실험 수행
 
