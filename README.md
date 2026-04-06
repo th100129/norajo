@@ -76,20 +76,35 @@ klue/bert-base (Baseline)
 
 ## 🏗️ Architecture
 [KLUE Dataset]
+
       ↓
+      
 [Preprocessing]
+
       ↓
+      
  ┌───────────────┬───────────────┬───────────────┐
+ 
  │ Baseline      │ BERT + CRF    │ GlobalPointer │
+ 
  └───────────────┴───────────────┴───────────────┘
+ 
           │               │               │
+          
           └────── GLiNER ────────────────┘
+          
       ↓
+      
 [Evaluation (F1 Score)]
+
       ↓
+      
 [Comparison & Analysis]
+
       ↓
+      
 [Additional Dataset Experiments]
+
 
 ## ⚙️ Preprocessing
 
