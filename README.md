@@ -1,186 +1,26 @@
-# 한국어 NER에서 Token vs Span vs Generative 접근 방식을 비교 분석하는 실험 프로젝트
+# GlobalPointer 코드 설명
+---
 
-KLUE NER 기반 다양한 NER 모델 성능 비교 프로젝트
-(Token-level vs Span-level vs Generative NER)
+## - 해결하고자 하는 문제
 
-## 📌 Overview
+최근 자연어 처리에서 개체명 인식(NER)은 텍스트에서 사람, 장소, 기관과 같은 의미 있는 정보를 추출하는 핵심 기술로 활용되고 있습니다. 기존의 NER 방식은 주로 BIO tagging 기반으로, 각 토큰에 대해 B-PER, I-PER, O와 같은 태그를 예측하는 방식이었습니다. 그러나 이러한 방식은 토큰 단위로 예측을 수행하기 때문에 개체의 시작과 끝을 명확하게 모델링하기 어렵고, 특히 중첩된 개체(Nested Entity)를 처리하는 데 한계가 있습니다.
 
-본 프로젝트는 한국어 NER(Named Entity Recognition) 태스크에서
-서로 다른 구조의 모델들을 비교 분석하는 것을 목표로 합니다.
+이러한 문제를 해결하기 위해 등장한 것이 GlobalPointer입니다. GlobalPointer는 기존의 토큰 분류 방식이 아니라, 문장 내의 모든 가능한 span, 즉 시작 위치와 끝 위치의 조합을 직접 예측하는 방식으로 NER 문제를 재정의합니다. 모델의 출력은 (entity_type, start, end) 형태로 구성되며, 이는 특정 엔티티 타입에 대해 해당 span이 엔티티일 확률을 나타냅니다. 이를 통해 모델은 개체를 보다 명확하게 span 단위로 인식할 수 있으며, nested entity도 자연스럽게 처리할 수 있습니다.
 
-특히 다음과 같은 접근 방식의 차이를 실험합니다:
+구조적으로 보면, 입력 문장은 토크나이징을 거쳐 BERT와 같은 사전학습 언어 모델에 입력됩니다. BERT의 출력은 각 토큰에 대한 contextual embedding이며, 이 벡터들은 GlobalPointer 레이어로 전달됩니다. GlobalPointer에서는 각 토큰에 대해 query와 key 벡터를 생성하고, 이 둘의 내적을 통해 모든 (start, end) 조합에 대한 score를 계산합니다. 이 과정은 torch.einsum을 통해 효율적으로 수행되며, 결과적으로 (batch, entity_type, seq_len, seq_len) 형태의 4차원 텐서가 생성됩니다.
 
-Token Classification 기반 (BERT, CRF)
+또한, 위치 정보를 효과적으로 반영하기 위해 RoPE(Rotary Position Encoding)를 적용합니다. 이는 단순한 positional embedding이 아니라, query와 key 간의 상대적 위치 관계를 반영할 수 있도록 도와주며, span 간의 관계를 더 잘 학습할 수 있게 합니다. 이후 padding 영역과 end < start인 잘못된 span을 제거하기 위해 mask를 적용하여 유효한 span만 남기게 됩니다.
 
-Span-based 방식 (GlobalPointer)
+학습 과정에서는 multilabel categorical crossentropy loss를 사용합니다. 이는 각 span이 특정 엔티티에 해당하는지를 독립적으로 판단하는 multi-label classification 문제로 정의되기 때문입니다. 기존 CRF 기반 모델과 달리, GlobalPointer는 별도의 구조적 제약 없이도 전체 span 관계를 동시에 고려할 수 있다는 장점이 있습니다.
 
-Label-conditioned / Generative NER (GLiNER)
+데이터 구성 측면에서도 차이가 있습니다. 기존 BIO 방식에서는 토큰마다 하나의 label을 가지지만, GlobalPointer에서는 (entity_type, seq_len, seq_len) 형태의 label matrix를 사용합니다. 예를 들어, 특정 엔티티가 start=2, end=5라면 해당 위치에 1을 설정하여 span을 표현합니다. 이 방식은 모델이 span 자체를 직접 학습하도록 돕습니다.
 
+추론 단계에서는 모델이 예측한 logits에서 threshold 이상의 값을 가지는 span들을 추출하여 엔티티로 변환합니다. 이때 각 엔티티는 label, start, end, score 형태로 구성되며, score는 해당 span의 confidence를 의미합니다. 하지만 GlobalPointer는 BIO tagging을 직접 출력하지 않기 때문에, 후처리 과정에서 span 정보를 BIO 태그로 변환하는 과정이 필요합니다. 이를 위해 score가 높은 span부터 우선적으로 적용하면서 BIO 형식으로 변환하고, 겹치는 영역은 제거하여 최종 태그를 생성합니다.
 
-## 🎯 Objectives
+최종 출력은 JSON 형태로 구성되며, 원본 텍스트, 토큰 정보, 정답 BIO 태그, 예측 BIO 태그, raw prediction(span 기반), 그리고 각 span의 confidence score까지 포함됩니다. 이를 통해 모델의 예측 결과를 다양한 방식으로 분석하고 활용할 수 있습니다.
 
-KLUE NER 데이터셋을 기반으로 다양한 모델 성능 비교
+정리하자면, GlobalPointer는 기존의 sequence labeling 기반 NER을 span classification 문제로 변환함으로써 보다 유연하고 강력한 표현력을 제공합니다. 특히 CRF 없이도 global dependency를 학습할 수 있으며, nested entity 처리와 병렬 연산 측면에서 큰 장점을 갖습니다. BIO tagging은 모델의 출력이 아니라 단순한 표현 방식이기 때문에, GlobalPointer에서는 이를 후처리 단계에서 변환하여 사용하는 것이 핵심적인 특징입니다.
 
-BIO tagging vs Span-based 접근 방식 비교
+결론적으로, GlobalPointer는 모든 가능한 span을 동시에 평가하여 개체를 인식하는 구조를 가지며, 이를 통해 기존 방식의 한계를 효과적으로 극복한 NER 모델이라고 할 수 있습니다.
 
-모델 구조에 따른 성능 및 특징 분석
-
-추가 데이터셋을 통한 일반화 성능 검증
-
-## 📂 Dataset
-
-## ✅ Main Dataset
-
-KLUE NER dataset
-
-약 26K 문장 규모
-
-Character-level BIO tagging
-
-Entity Types:
-
-DT (Date)
-
-LC (Location)
-
-OG (Organization)
-
-PS (Person)
-
-QT (Quantity)
-
-TI (Time)
-
-## ➕ Additional Dataset (for generalization)
-
-kor-ner-spacy-data
-
-corpus4everyone-klue-korean-NER
-
-## 🤖 Models
-
-### 🔹 Backbone
-
-klue/bert-base (Baseline)
-
-### 🔹 Model Variants
-
-| Model                    | Description                       |
-| ------------------------ | --------------------------------- |
-| **BERT (Baseline)**      | Token classification 기반           |
-| **BERT + CRF**           | BIO 태그 간 의존성 반영                   |
-| **BERT + GlobalPointer** | Span-level entity detection       |
-| **KRF-BERT**             | 한국어 NER 특화 사전학습 모델                |
-| **GLiNER**               | Label-conditioned span prediction |
-| **SpaCy (optional)**     | Rule + statistical baseline       |
-
-## 🏗️ Architecture
-[KLUE Dataset]
-      ↓
-[Preprocessing]
-      ↓
- ┌───────────────┬───────────────┬───────────────┐
- │ Baseline      │ BERT + CRF    │ GlobalPointer │
- └───────────────┴───────────────┴───────────────┘
-          │               │               │
-          └────── GLiNER ────────────────┘
-      ↓
-[Evaluation (F1 Score)]
-      ↓
-[Comparison & Analysis]
-      ↓
-[Additional Dataset Experiments]
-
-## ⚙️ Preprocessing
-
-KLUE NER 데이터는 기본적으로 BIO tagging 기반이므로
-모델별로 다른 전처리가 필요합니다.
-
-### ✔ Token-based (BERT, CRF)
-tokens + ner_tags 그대로 사용
-### ✔ Span-based (GlobalPointer)
-BIO → (start, end, label) 변환
-Token index 기준 span 생성
-### ✔ GLiNER
-BIO → 문자 기반 span 변환
-입력 형태:
-{
-  "text": "...",
-  "labels": ["DT","LC","OG","PS","QT","TI"],
-  "entities": [{"start": 0, "end": 3, "label": "PS"}]
-}
-
-## 🧩 Modules
-| Module             | Description             |
-| ------------------ | ----------------------- |
-| **Span Generator** | BIO → span 변환           |
-| **BERT + CRF**     | Token-level + CRF       |
-| **GlobalPointer**  | Span-level 모델           |
-| **GLiNER**         | Label-conditioned NER   |
-| **Evaluator**      | Precision / Recall / F1 |
-| **Comparison**     | 모델 간 성능 비교              |
-
-## 👥 Team
-| Role                           | 담당 |
-| ------------------------------ | -- |
-| Preprocessing (Span Generator) | 김경훈 |
-| BERT + CRF                     | 박다현 |
-| GlobalPointer                  | 진주용 |
-| GLiNER                         | 김인하 |
-| Evaluation / Comparison        | 허태희(팀장) |
-
-## 📊 Evaluation
-
-Metric: F1 Score (Entity-level)
-
-## 추가 지표:
-
-Precision
-
-Recall
-
-## 🔍 Key Research Questions
-
-BIO tagging vs Span-based 방식 중 어떤 것이 더 효과적인가?
-
-GlobalPointer는 CRF보다 성능이 좋은가?
-
-GLiNER는 zero-shot/generalization에서 강점을 가지는가?
-
-
-## 한국어 NER에서 span 방식이 더 유리한가?
-
-## 🚀 Expected Contributions
-
-한국어 NER 모델 구조별 성능 비교
-
-다양한 접근 방식(Token vs Span vs Generative) 분석
-
-실무 적용 관점에서의 모델 선택 가이드 제공
-
-## 📌 Future Work
-
-LLM 기반 NER (GPT-NER, instruction tuning)
-
-Multi-task learning (NER + RE)
-
-Domain-specific NER 확장
-
-## 🛠️ Tech Stack
-
-Python
-
-PyTorch
-
-Hugging Face Transformers / Datasets
-
-sklearn (evaluation)
-
-CUDA / GPU
-
-## ⭐ Notes
-
-KLUE dataset 기반으로 실험 수행
-
-모델별 공정한 비교를 위해 동일한 split 및 평가 기준 사용
-
+---
