@@ -106,25 +106,25 @@ NER은 다음과 같은 다양한 NLP 응용의 핵심 기술이다.
   - BIO tagging 방식
   - 다양한 entity 타입 포함(PS, LC, DT, QT 등)
  
-  ---
+---
 
-  - 전처리 방법
-    1. <entity:label> 형태 annotation 제거
-    2. clean sentence 생성
-    3. 문자 단위 tokens 및 BIO tag 유지
-    4. BERT tokenizer 적용(subword tokenization)
-    5. character-level tag -> subword align
-    6. special token([CLS], {SEP]) label 제외
-    7. json 형태로 저장
+- 전처리 방법
+  1. <entity:label> 형태 annotation 제거
+  2. clean sentence 생성
+  3. 문자 단위 tokens 및 BIO tag 유지
+  4. BERT tokenizer 적용(subword tokenization)
+  5. character-level tag -> subword align
+  6. special token([CLS], {SEP]) label 제외
+  7. json 형태로 저장
    
-    ---
+---
 
-    - 기대효과
-      각 모델은 다음과 같은 성능 차이를 보일 것으로 예상된다.:
-      - BERT -> 기본 성능 기준선
-      - BERT + CRF -> label consistency 향상
-      - GlobalPointer -> boundary 인식 향상
-      - GLiNER -> 유연한 엔티티 표현
+- 기대효과
+  각 모델은 다음과 같은 성능 차이를 보일 것으로 예상된다.:
+    - BERT -> 기본 성능 기준선
+    - BERT + CRF -> label consistency 향상
+    - GlobalPointer -> boundary 인식 향상
+    - GLiNER -> 유연한 엔티티 표현
      
     ---
 
