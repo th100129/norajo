@@ -126,7 +126,7 @@ NER은 다음과 같은 다양한 NLP 응용의 핵심 기술이다.
     - GlobalPointer -> boundary 인식 향상
     - GLiNER -> 유연한 엔티티 표현
      
-    ---
+---
 
 ## 4. Experiment Design
 
@@ -146,7 +146,7 @@ NER은 다음과 같은 다양한 NLP 응용의 핵심 기술이다.
  -  학습 속도
  -  추론 속도
    
-  ---
+---
   
 ## Evaluation Metrics
 - Precision
