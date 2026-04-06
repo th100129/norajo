@@ -27,7 +27,7 @@
 
 ### 👤 진주용
 - Yesterday:
-- Today:
+- Today: BERT, GLOBALPOINTER 이해 및 코드 구현
 - Blocker:
 
 ---
