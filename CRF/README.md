@@ -15,12 +15,13 @@ BERT+CRF 기반 Named Entity Recognition 모델을 구현하고 학습하였다.
 - 평가 시 [CLS], [SEP], [PAD] 등 의미 없는 토큰은 제외하고 실제 문장 토큰 기준으로 metric 계산
 
 ## Results
+
 | Metric     | Score  |
-|-----------|--------|
-| Accuracy  | 0.9554 |
-| Precision | 0.7624 |
-| Recall    | 0.8049 |
-| F1-score  | 0.7831 |
+|------------|--------|
+| Accuracy   | 0.9554 |
+| Precision  | 0.7624 |
+| Recall     | 0.8049 |
+| F1-score   | 0.7831 |
 
 ## Notes
 - 성능 개선 실험 진행 예정
