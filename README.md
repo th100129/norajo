@@ -21,23 +21,15 @@ Loss: Cross Entropy
 Evaluation Metric: Precision / Recall / F1 / Accuracy (seqeval)
 
 ## 🔹 Results (Validation)
-| Metric    | Score      |
-| --------- | ---------- |
-| Precision | 0.8595     |
-| Recall    | 0.8503     |
-| F1 Score  | **0.8549** |
-| Accuracy  | 0.9576     |
+## Baseline (KLUE-BERT + Linear Classification)
 
-## 🔹 Training Trend
-| Epoch | F1 Score   |
-| ----- | ---------- |
-| 1     | 0.8165     |
-| 2     | 0.8457     |
-| 3     | 0.8494     |
-| 4     | 0.8536     |
-| 5     | **0.8549** |
-
-👉 Epoch 증가에 따라 안정적으로 성능 향상
+| Epoch | Train Loss | Valid Loss | Precision | Recall | F1 Score | Accuracy |
+|------|-----------|-----------|----------|--------|----------|----------|
+| 1 | 0.162367 | 0.167950 | 0.818441 | 0.814659 | 0.816546 | 0.946105 |
+| 2 | 0.105366 | 0.151202 | 0.854642 | 0.836966 | 0.845712 | 0.955286 |
+| 3 | 0.080413 | 0.147205 | 0.855235 | 0.843706 | 0.849431 | 0.956430 |
+| 4 | 0.056857 | 0.155693 | 0.855686 | 0.851609 | 0.853643 | 0.957210 |
+| 5 | 0.049319 | 0.164677 | 0.859529 | 0.850271 | 0.854875 | 0.957565 |
 
 ## 🔹 Analysis
 기본 Token Classification 방식만으로도 F1 ≈ 0.85 수준 확보
