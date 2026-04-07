@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 연구 계획서
 ---
 ## 1. Problem Definition
