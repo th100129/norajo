@@ -30,6 +30,15 @@ from torch.optim import AdamW
 
 # =========================================================
 # 0. CUDA 성능 옵션
+#    - GPU 사용 시 matmul / cudnn 최적화를 활성화
+#    - Tensor Core 활용 가능 시 학습 속도 향상에 도움
+#
+#    torch.backends.cuda.matmul.allow_tf32
+#    : 행렬 곱셈(MatMul) 연산에서 TF32(TensorFloat32) 데이터 형식을 허용할지 여부를 설정
+#    torch.backends.cudnn.allow_tf32
+#    : TF32(TensorFloat-32) 데이터 포맷을 허용할지 여부를 설정
+#    torch.backends.cudnn.benchmark
+#    : cuDNN 라이브러리의 컨볼루션(Convolution) 연산 알고리즘을 자동으로 최적화
 # =========================================================
 if torch.cuda.is_available():
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -39,29 +48,41 @@ if torch.cuda.is_available():
 
 # =========================================================
 # 1. Config
+#    모델/데이터/학습 관련 설정을 관리하는 클래스
 # =========================================================
 @dataclass
 class Config:
-    pretrained_model_name: str = "klue/roberta-base"
+    pretrained_model_name: str = "klue/roberta-base" # 사전학습 모델 이름
 
-    train_json_path: str = "/content/klue_ner_globalpointer_train.jsonl"
-    valid_json_path: str = "/content/klue_ner_globalpointer_valid.jsonl"
+    train_json_path: str = "/content/klue_ner_globalpointer_train.jsonl" # 학습 데이터 경로
+    valid_json_path: str = "/content/klue_ner_globalpointer_valid.jsonl" # 검증 데이터 경로
 
-    batch_size: int = 64
-    lr: float = 2e-5
-    epochs: int = 5
-    inner_dim: int = 64
-    threshold: float = 0.0
+    batch_size: int = 64 # 한 번에 학습할 배치 크기
+    lr: float = 2e-5 # 학습률
+    epochs: int = 5 # 전체 학습 epoch 수
+    inner_dim: int = 64 # GlobalPointer 내부 차원
+    threshold: float = 0.0 # 예측 span 추출 시 score threshold
 
-    num_workers: int = 4
-    max_grad_norm: float = 1.0
-    use_amp: bool = True
+    num_workers: int = 4 # DataLoader에서 데이터를 병렬로 읽어올 worker 수
+    max_grad_norm: float = 1.0 # 역전파 시 gradient clipping에 사용할 최대 norm 값
+    use_amp: bool = True # AMP(Automatic Mixed Precision) 사용 여부
 
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    device: str = "cuda" if torch.cuda.is_available() else "cpu" # GPU 사용 가능 시 cuda, 아니면 cpu
 
 
 # =========================================================
 # 2. JSON / JSONL 로드
+#    Args:
+#        json_path (str): json 또는 jsonl 파일 경로
+#
+#    Returns:
+#        data: List[Dict]
+#    
+#    Raises:
+#        FileNotFoundError: 파일을 찾을 수 없습니다.
+#        ValueError: 파일이 비어 있습니다.
+#                    JSON은 리스트 형태여야 합니다.
+#        JSONDecodeError: JSON 파싱 실패
 # =========================================================
 def load_jsonl_file(json_path: str) -> List[Dict]:
     if not os.path.exists(json_path):
@@ -97,6 +118,13 @@ def load_jsonl_file(json_path: str) -> List[Dict]:
 
 # =========================================================
 # 3. label map 생성
+#    Args:
+#        train_data (List[Dict]): train 데이터
+#        valid_data (List[Dict]): valid 데이터
+#
+#    Returns:
+#        label2id (Dict[str, int]): 라벨명을 정수 id로 매핑한 딕셔너리
+#        id2label (Dict[int, str]): 정수 id를 라벨명으로 매핑한 딕셔너리
 # =========================================================
 def build_label_maps(train_data: List[Dict], valid_data: List[Dict]) -> Tuple[Dict[str, int], Dict[int, str]]:
     entity_types = set()
@@ -113,7 +141,13 @@ def build_label_maps(train_data: List[Dict], valid_data: List[Dict]) -> Tuple[Di
 
 
 # =========================================================
-# 4. Loss
+# 4. Multi-label Categorical Crossentropy Loss
+#    Args:
+#        y_pred (torch.Tensor): 예측 logits, shape = (B, C, L, L)
+#        y_true (torch.Tensor): 정답 label tensor, shape = (B, C, L, L)
+#
+#    Returns:
+#        loss (torch.Tensor): 평균 loss
 # =========================================================
 def multilabel_categorical_crossentropy(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     """
@@ -134,7 +168,13 @@ def multilabel_categorical_crossentropy(y_pred: torch.Tensor, y_true: torch.Tens
 
 
 # =========================================================
-# 5. RoPE 캐시
+# 5. RoPE positional embedding 캐시 클래스
+#    Args:
+#        max_seq_len (int): 최대 시퀀스 길이
+#        inner_dim (int): RoPE 적용 차원
+#
+#    Attributes:
+#        pos_emb (torch.Tensor): 미리 계산해둔 positional embedding
 # =========================================================
 class RoPEPositionEncoding(nn.Module):
     def __init__(self, max_seq_len: int, inner_dim: int):
@@ -153,10 +193,27 @@ class RoPEPositionEncoding(nn.Module):
         pos_emb = torch.stack([sin_embeddings, cos_embeddings], dim=-1).reshape(max_seq_len, inner_dim)
         self.register_buffer("pos_emb", pos_emb, persistent=False)
 
+    # =========================================================
+    # 5-1. 캐시된 positional embedding 반환
+    #    Args:
+    #        seq_len (int): 현재 입력 시퀀스 길이
+    #        batch_size (int): 현재 배치 크기
+    #
+    #    Returns:
+    #        pos_emb (torch.Tensor): shape = (B, L, D)
+    # =========================================================
     def forward(self, seq_len: int, batch_size: int) -> torch.Tensor:
         return self.pos_emb[:seq_len].unsqueeze(0).expand(batch_size, -1, -1)
 
-
+# =========================================================
+# 6. RoPE 적용 함수
+#    Args:
+#        x (torch.Tensor): 입력 텐서, shape = (B, L, C, D)
+#        pos_emb (torch.Tensor): positional embedding, shape = (B, L, D)
+#
+#    Returns:
+#        rotated_x (torch.Tensor): RoPE가 적용된 텐서
+# =========================================================
 def apply_rope(x: torch.Tensor, pos_emb: torch.Tensor) -> torch.Tensor:
     """
     x: (batch, seq_len, ent_type_size, inner_dim)
@@ -170,7 +227,13 @@ def apply_rope(x: torch.Tensor, pos_emb: torch.Tensor) -> torch.Tensor:
 
 
 # =========================================================
-# 6. GlobalPointer Head
+# 7. GlobalPointer Head
+#    Args:
+#        hidden_size (int): encoder hidden size
+#        ent_type_size (int): 엔티티 타입 개수
+#        inner_dim (int): GlobalPointer 내부 차원
+#        max_seq_len (int): 최대 시퀀스 길이
+#        use_rope (bool): RoPE 사용 여부
 # =========================================================
 class GlobalPointer(nn.Module):
     def __init__(self, hidden_size: int, ent_type_size: int, inner_dim: int, max_seq_len: int = 512, use_rope: bool = True):
@@ -183,6 +246,15 @@ class GlobalPointer(nn.Module):
         if use_rope:
             self.rope = RoPEPositionEncoding(max_seq_len=max_seq_len, inner_dim=inner_dim)
 
+    # =========================================================
+    # 7-1. GlobalPointer forward
+    #    Args:
+    #        last_hidden_state (torch.Tensor): encoder 출력, shape = (B, L, H)
+    #        attention_mask (torch.Tensor): attention mask, shape = (B, L)
+    #
+    #    Returns:
+    #        logits (torch.Tensor): span score, shape = (B, C, L, L)
+    # =========================================================
     def forward(self, last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, _ = last_hidden_state.size()
 
@@ -213,7 +285,12 @@ class GlobalPointer(nn.Module):
 
 
 # =========================================================
-# 7. Encoder + GlobalPointer
+# 8. Encoder(Bert) + GlobalPointer 모델
+#    Args:
+#        pretrained_model_name (str): 사용할 사전학습 모델 이름
+#        ent_type_size (int): 엔티티 타입 개수
+#        inner_dim (int): GlobalPointer 내부 차원
+#        max_seq_len (int): 최대 시퀀스 길이
 # =========================================================
 class BertGlobalPointerForNER(nn.Module):
     def __init__(self, pretrained_model_name: str, ent_type_size: int, inner_dim: int, max_seq_len: int = 512):
@@ -229,6 +306,17 @@ class BertGlobalPointerForNER(nn.Module):
             use_rope=True
         )
 
+    # =========================================================
+    # 8-1. 모델 forward
+    #    Args:
+    #        input_ids (torch.Tensor): 입력 토큰 id
+    #        attention_mask (torch.Tensor): attention mask
+    #        token_type_ids (torch.Tensor | None): token type ids
+    #        labels (torch.Tensor | None): 정답 label tensor
+    #
+    #    Returns:
+    #        result (Dict): logits, labels가 있으면 loss 포함
+    # =========================================================
     def forward(self, input_ids, attention_mask, token_type_ids=None, labels=None):
         encoder_kwargs = {
             "input_ids": input_ids,
@@ -257,7 +345,11 @@ class BertGlobalPointerForNER(nn.Module):
 
 
 # =========================================================
-# 8. Dataset
+# 9. Local JSON/JSONL NER Dataset
+#    Args:
+#        data (List[Dict]): 데이터 샘플 리스트
+#        label2id (Dict[str, int]): 라벨-아이디 매핑
+#        split_name (str): 데이터 구분(train/valid/test)
 # =========================================================
 class LocalJsonlNERDataset(Dataset):
     def __init__(
@@ -271,9 +363,27 @@ class LocalJsonlNERDataset(Dataset):
         self.ent_type_size = len(label2id)
         self.split_name = split_name
 
+    # =========================================================
+    # 9-1. 데이터셋 길이 반환
+    #    Returns:
+    #        length (int): 데이터셋 샘플 수
+    # =========================================================
     def __len__(self):
         return len(self.data)
 
+    # =========================================================
+    # 9-2. 단일 샘플 반환
+    #    Args:
+    #        idx (int): 샘플 인덱스
+    #
+    #    Returns:
+    #        item (Dict): 학습에 사용할 텐서 및 메타데이터
+    #
+    #    Raises:
+    #        ValueError: attention_mask 길이가 input_ids와 다릅니다.
+    #                    token_type_ids 길이가 input_ids와 다릅니다.
+    # 
+    # =========================================================
     def __getitem__(self, idx):
         sample = self.data[idx]
 
@@ -331,7 +441,12 @@ class LocalJsonlNERDataset(Dataset):
 
 
 # =========================================================
-# 9. Collate
+# 10. Collate 함수
+#    Args:
+#        features (List[Dict]): Dataset에서 꺼낸 샘플 리스트
+#
+#    Returns:
+#        batch (Dict): 배치 단위 텐서 묶음
 # =========================================================
 def collate_fn(features):
     batch = {
@@ -353,20 +468,46 @@ def collate_fn(features):
 
 
 # =========================================================
-# 10. 빠른 span 추출
+# 11. gold entity 추출
+#    Args:
+#        labels (torch.Tensor): 정답 label tensor, shape = (C, L, L)
+#        id2label (Dict[int, str]): id -> label 매핑
+#
+#    Returns:
+#        results (Set[Tuple[str, int, int]]): 정답 엔티티 집합
 # =========================================================
 def extract_gold_entities_fast(labels: torch.Tensor, id2label: Dict[int, str]) -> Set[Tuple[str, int, int]]:
     indices = torch.nonzero(labels > 0, as_tuple=False)
     return {(id2label[int(c)], int(s), int(e)) for c, s, e in indices}
 
-
+# =========================================================
+# 12. prediction entity 추출
+#    Args:
+#        logits (torch.Tensor): 예측 logits, shape = (C, L, L)
+#        id2label (Dict[int, str]): id -> label 매핑
+#        threshold (float): score threshold
+#
+#    Returns:
+#        results (Set[Tuple[str, int, int]]): 예측 엔티티 집합
+# =========================================================
 def extract_pred_entities_fast(logits: torch.Tensor, id2label: Dict[int, str], threshold: float = 0.0) -> Set[Tuple[str, int, int]]:
     indices = torch.nonzero(logits > threshold, as_tuple=False)
     return {(id2label[int(c)], int(s), int(e)) for c, s, e in indices}
 
-
 # =========================================================
-# 11. Eval
+# 13. F1 계산
+#    Args:
+#        model: 학습된 모델
+#        dataloader: 검증 데이터 로더
+#        device (str): 실행 장치
+#        id2label (Dict[int, str]): id -> label 매핑
+#        threshold (float): score threshold
+#        use_amp (bool): AMP 사용 여부
+#
+#    Returns:
+#        precision (float): 정밀도
+#        recall (float): 재현율
+#        f1 (float): F1 score
 # =========================================================
 @torch.no_grad()
 def compute_f1_fast(model, dataloader, device, id2label, threshold=0.0, use_amp=True):
@@ -410,7 +551,14 @@ def compute_f1_fast(model, dataloader, device, id2label, threshold=0.0, use_amp=
 
 
 # =========================================================
-# 12. Decode
+# 14. logits -> raw entity decode
+#    Args:
+#        logits (torch.Tensor): 예측 logits, shape = (C, L, L)
+#        id2label (Dict[int, str]): id -> label 매핑
+#        threshold (float): score threshold
+#
+#    Returns:
+#        entities (List[Dict]): raw prediction 리스트
 # =========================================================
 def decode_entities_from_logits_fast(logits: torch.Tensor, id2label: Dict[int, str], threshold: float = 0.0):
     """
@@ -437,7 +585,19 @@ def decode_entities_from_logits_fast(logits: torch.Tensor, id2label: Dict[int, s
 
 
 # =========================================================
-# 13. BIO 변환
+# 15-1. 예측 엔티티를 BIO 태그로 변환
+#    Args:
+#        seq_len (int): 시퀀스 길이
+#        entities (List[Dict]): 예측 엔티티 리스트
+#            예: [{"label": "PER", "start": 1, "end": 3, "score": 0.95}, ...]
+#
+#    Returns:
+#        bio_tags (List[str]): BIO 형식의 토큰 단위 태그 리스트
+#
+#    Notes:
+#        - score가 높은 span부터 우선 반영합니다.
+#        - 이미 다른 엔티티가 점유한 구간은 중복 반영하지 않습니다.
+#        - 범위를 벗어나거나 end < start 인 span은 무시합니다.
 # =========================================================
 def convert_entities_to_bio(seq_len: int, entities: List[Dict]) -> List[str]:
     """
@@ -473,7 +633,20 @@ def convert_entities_to_bio(seq_len: int, entities: List[Dict]) -> List[str]:
 
     return bio_tags
 
-
+# =========================================================
+# 15-2. 정답 엔티티를 BIO 태그로 변환
+#    Args:
+#        seq_len (int): 시퀀스 길이
+#        gold_entities (List[Dict]): 정답 엔티티 리스트
+#            예: [{"label": "PER", "start": 1, "end": 3}, ...]
+#
+#    Returns:
+#        bio_tags (List[str]): 정답 기준 BIO 형식 태그 리스트
+#
+#    Notes:
+#        - gold entity는 일반적으로 score가 없으므로 별도로 처리합니다.
+#        - 범위를 벗어나거나 end < start 인 span은 무시합니다.
+# =========================================================
 def convert_gold_entities_to_bio(seq_len: int, gold_entities: List[Dict]) -> List[str]:
     """
     gold entity -> BIO tag
@@ -499,7 +672,24 @@ def convert_gold_entities_to_bio(seq_len: int, gold_entities: List[Dict]) -> Lis
 
 
 # =========================================================
-# 14. JSON 출력 구성
+# 16. JSON 출력 구성
+#    Args:
+#        sample (Dict): 원본 샘플 데이터
+#            예: {
+#                "text": ...,
+#                "input_ids": [...],
+#                "entities": [...]
+#            }
+#        pred_entities (List[Dict]): 모델이 예측한 엔티티 리스트
+#
+#    Returns:
+#        output (Dict): JSON 저장용 결과 딕셔너리
+#
+#    Notes:
+#        - tokens는 입력의 토큰 단위를 그대로 유지하기 위해 input_ids를 사용합니다.
+#        - gold_bio_tags는 정답 엔티티 기준 BIO 태그입니다.
+#        - pred_bio_tags는 예측 엔티티 기준 BIO 태그입니다.
+#        - confidence_scores는 raw prediction에서 label/start/end/score만 추출한 정보입니다.
 # =========================================================
 def build_prediction_output(sample: Dict, pred_entities: List[Dict]) -> Dict:
     seq_len = len(sample["input_ids"])
@@ -527,7 +717,15 @@ def build_prediction_output(sample: Dict, pred_entities: List[Dict]) -> Dict:
 
 
 # =========================================================
-# 15. DataLoader 생성
+# 17. DataLoader 생성
+#    Args:
+#        cfg (Config): 전체 설정 객체
+#
+#    Returns:
+#        label2id (Dict[str, int]): 라벨 -> id 매핑
+#        id2label (Dict[int, str]): id -> 라벨 매핑
+#        train_loader (DataLoader): 학습 데이터로더
+#        valid_loader (DataLoader): 검증 데이터로더
 # =========================================================
 def build_dataloaders(cfg: Config):
     train_data = load_jsonl_file(cfg.train_json_path)
@@ -538,6 +736,7 @@ def build_dataloaders(cfg: Config):
 
     label2id, id2label = build_label_maps(train_data, valid_data)
     print(f"[INFO] label2id: {label2id}")
+    # DT-날짜-0,LC-장소-1,OG-기관-2,PS-사람-3,QT-수량-4,TI-시간-5
 
     train_dataset = LocalJsonlNERDataset(
         data=train_data,
@@ -573,7 +772,14 @@ def build_dataloaders(cfg: Config):
 
 
 # =========================================================
-# 16. Train
+# 18. 학습 함수
+#    Args:
+#        없음
+#
+#    Returns:
+#        model: 학습 완료된 모델
+#        cfg (Config): 설정 객체
+#        id2label (Dict[int, str]): id -> label 매핑
 # =========================================================
 def train():
     cfg = Config()
@@ -651,7 +857,16 @@ def train():
 
 
 # =========================================================
-# 17. Predict
+# 19. 단일 샘플 예측
+#    Args:
+#        model: 학습된 모델
+#        cfg (Config): 설정 객체
+#        id2label (Dict[int, str]): id -> label 매핑
+#        sample (Dict): 예측할 샘플
+#        threshold (float): score threshold
+#
+#    Returns:
+#        pred_entities (List[Dict]): 예측된 엔티티 리스트
 # =========================================================
 @torch.no_grad()
 def predict_from_sample(model, cfg, id2label, sample: Dict, threshold: float = 0.0):
@@ -683,7 +898,15 @@ def predict_from_sample(model, cfg, id2label, sample: Dict, threshold: float = 0
 
 
 # =========================================================
-# 18. 전체 valid set 예측 저장
+# 20. 테스트셋 전체 예측 후 JSON 저장
+#    Args:
+#        model: 학습된 모델
+#        cfg (Config): 설정 객체
+#        id2label (Dict[int, str]): id -> label 매핑
+#        output_path: 저장 경로
+#
+#    Returns:
+#        results (List[Dict]): 테스트셋 raw prediction 결과
 # =========================================================
 @torch.no_grad()
 def predict_and_save_all_valid(model, cfg, id2label, output_path: str = "/content/valid_predictions_bio.jsonl"):
@@ -699,7 +922,10 @@ def predict_and_save_all_valid(model, cfg, id2label, output_path: str = "/conten
 
 
 # =========================================================
-# 19. 실행
+# 21. 메인 실행부
+#    - 모델 학습
+#    - valid 첫 샘플 예측 확인
+#    - test 전체 예측 후 JSON 저장
 # =========================================================
 if __name__ == "__main__":
     model, cfg, id2label = train()
