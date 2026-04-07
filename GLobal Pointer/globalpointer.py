@@ -52,7 +52,7 @@ if torch.cuda.is_available():
 # =========================================================
 @dataclass
 class Config:
-    pretrained_model_name: str = "klue/roberta-base" # 사전학습 모델 이름
+    pretrained_model_name: str = "klue/bert-base" # 사전학습 모델 이름
 
     train_json_path: str = "/content/klue_ner_globalpointer_train.jsonl" # 학습 데이터 경로
     valid_json_path: str = "/content/klue_ner_globalpointer_valid.jsonl" # 검증 데이터 경로
