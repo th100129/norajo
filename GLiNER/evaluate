@@ -1,0 +1,65 @@
+===== Epoch 1/5 =====
+[Train]: 100%|██████████| 1313/1313 [10:09<00:00,  2.15it/s, loss=0.0008]
+[Valid]: 100%|██████████| 313/313 [04:51<00:00,  1.07it/s, loss=0.0014]
+
+[Epoch 1 결과]
+Train Loss : 0.0028
+Valid Loss : 0.0016
+Precision  : 0.7933
+Recall     : 0.6722
+F1 Score   : 0.7277
+TP / FP / FN = 9583 / 2497 / 4674
+✅ best_gliner.pt 저장 완료
+
+===== Epoch 2/5 =====
+[Train]: 100%|██████████| 1313/1313 [10:11<00:00,  2.15it/s, loss=0.0008]
+[Valid]: 100%|██████████| 313/313 [04:50<00:00,  1.08it/s, loss=0.0012]
+
+[Epoch 2 결과]
+Train Loss : 0.0011
+Valid Loss : 0.0012
+Precision  : 0.8282
+Recall     : 0.7806
+F1 Score   : 0.8037
+TP / FP / FN = 11129 / 2309 / 3128
+✅ best_gliner.pt 저장 완료
+
+===== Epoch 3/5 =====
+[Train]: 100%|██████████| 1313/1313 [10:11<00:00,  2.15it/s, loss=0.0006]
+[Valid]: 100%|██████████| 313/313 [04:50<00:00,  1.08it/s, loss=0.0009]
+
+[Epoch 3 결과]
+Train Loss : 0.0008
+Valid Loss : 0.0010
+Precision  : 0.8446
+Recall     : 0.7949
+F1 Score   : 0.8190
+TP / FP / FN = 11333 / 2085 / 2924
+✅ best_gliner.pt 저장 완료
+
+===== Epoch 4/5 =====
+[Train]: 100%|██████████| 1313/1313 [10:11<00:00,  2.15it/s, loss=0.0008]
+[Valid]: 100%|██████████| 313/313 [04:51<00:00,  1.07it/s, loss=0.0009]
+
+[Epoch 4 결과]
+Train Loss : 0.0006
+Valid Loss : 0.0009
+Precision  : 0.8524
+Recall     : 0.8199
+F1 Score   : 0.8358
+TP / FP / FN = 11690 / 2025 / 2567
+✅ best_gliner.pt 저장 완료
+
+===== Epoch 5/5 =====
+[Train]: 100%|██████████| 1313/1313 [10:11<00:00,  2.15it/s, loss=0.0005]
+[Valid]: 100%|██████████| 313/313 [04:51<00:00,  1.07it/s, loss=0.0012]
+[Epoch 5 결과]
+Train Loss : 0.0005
+Valid Loss : 0.0010
+Precision  : 0.8313
+Recall     : 0.8242
+F1 Score   : 0.8277
+TP / FP / FN = 11750 / 2385 / 2507
+
+학습 종료
+Best Valid F1: 0.8358
