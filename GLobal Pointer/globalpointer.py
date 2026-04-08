@@ -57,7 +57,7 @@ class Config:
     train_json_path: str = "/content/klue_ner_globalpointer_train.jsonl" # 학습 데이터 경로
     valid_json_path: str = "/content/klue_ner_globalpointer_valid.jsonl" # 검증 데이터 경로
 
-    batch_size: int = 64 # 한 번에 학습할 배치 크기
+    batch_size: int = 16 # 한 번에 학습할 배치 크기
     lr: float = 2e-5 # 학습률
     epochs: int = 5 # 전체 학습 epoch 수
     inner_dim: int = 64 # GlobalPointer 내부 차원
@@ -77,7 +77,7 @@ class Config:
 #
 #    Returns:
 #        data: List[Dict]
-#    
+#
 #    Raises:
 #        FileNotFoundError: 파일을 찾을 수 없습니다.
 #        ValueError: 파일이 비어 있습니다.
@@ -382,7 +382,7 @@ class LocalJsonlNERDataset(Dataset):
     #    Raises:
     #        ValueError: attention_mask 길이가 input_ids와 다릅니다.
     #                    token_type_ids 길이가 input_ids와 다릅니다.
-    # 
+    #
     # =========================================================
     def __getitem__(self, idx):
         sample = self.data[idx]
@@ -770,9 +770,77 @@ def build_dataloaders(cfg: Config):
 
     return label2id, id2label, train_loader, valid_loader
 
+# =========================================================
+# 18. 모델 저장 (.pt)
+#    Args:
+#        model: 학습 완료된 모델 객체
+#        cfg (Config): 모델 설정 객체
+#        label2id (Dict[str, int]): 라벨 → id 매핑
+#        id2label (Dict[int, str]): id → 라벨 매핑
+#        save_path (str): 저장할 .pt 파일 경로 (default: "/content/bert_globalpointer_ner.pt")
+#
+#    Returns:
+#        없음
+#
+#    Notes:
+#        - 모델 파라미터(state_dict)와 함께 추론에 필요한 설정 정보를 함께 저장합니다.
+#        - 추후 load_model_pt()에서 동일한 모델 구조를 복원할 수 있도록
+#          pretrained_model_name, inner_dim, threshold 등을 포함합니다.
+#        - label2id / id2label도 저장하여 추론 시 label 복원을 가능하게 합니다.
+# =========================================================
+def save_model_pt(model, cfg, label2id, id2label, save_path: str = "/content/bert_globalpointer_ner.pt"):
+    save_obj = {
+        "model_state_dict": model.state_dict(),
+        "pretrained_model_name": cfg.pretrained_model_name,
+        "inner_dim": cfg.inner_dim,
+        "threshold": cfg.threshold,
+        "label2id": label2id,
+        "id2label": id2label,
+    }
+    torch.save(save_obj, save_path)
+    print(f"[INFO] 모델 pt 저장 완료: {save_path}")
+
 
 # =========================================================
-# 18. 학습 함수
+# 19. 모델 로드 (.pt)
+#    Args:
+#        pt_path (str): 저장된 .pt 파일 경로
+#        device (str): 모델을 로드할 장치 ("cpu" 또는 "cuda")
+#
+#    Returns:
+#        model: 로드된 모델 객체 (eval 모드)
+#        label2id (Dict[str, int]): 라벨 → id 매핑
+#        id2label (Dict[int, str]): id → 라벨 매핑
+#        checkpoint (Dict): 저장된 전체 정보 (설정 + state_dict 포함)
+#
+#    Notes:
+#        - 저장된 checkpoint 정보를 기반으로 모델 구조를 재구성합니다.
+#        - state_dict를 로드하여 학습된 가중치를 복원합니다.
+#        - model.eval()을 통해 추론 모드로 설정합니다.
+#        - max_seq_len은 코드 상에서 고정값(512)으로 설정되어 있으므로
+#          저장 시점과 동일하게 유지해야 합니다.
+# =========================================================
+def load_model_pt(pt_path: str, device: str = "cpu"):
+    checkpoint = torch.load(pt_path, map_location=device)
+
+    label2id = checkpoint["label2id"]
+    id2label = checkpoint["id2label"]
+
+    model = BertGlobalPointerForNER(
+        pretrained_model_name=checkpoint["pretrained_model_name"],
+        ent_type_size=len(label2id),
+        inner_dim=checkpoint["inner_dim"],
+        max_seq_len=512
+    ).to(device)
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+
+    print(f"[INFO] 모델 pt 로드 완료: {pt_path}")
+    return model, label2id, id2label, checkpoint
+
+# =========================================================
+# 20. 학습 함수
 #    Args:
 #        없음
 #
@@ -797,6 +865,9 @@ def train():
     scaler = torch.cuda.amp.GradScaler(enabled=(cfg.use_amp and cfg.device.startswith("cuda")))
 
     amp_dtype = torch.float16 if cfg.device.startswith("cuda") else torch.float32
+
+    best_f1 = -1.0
+    best_model_path = "/content/bert_globalpointer_ner_best.pt"
 
     for epoch in range(cfg.epochs):
         model.train()
@@ -853,11 +924,31 @@ def train():
             f"valid_f1={val_f1:.4f}"
         )
 
+        if val_f1 > best_f1:
+            best_f1 = val_f1
+            save_model_pt(
+                model=model,
+                cfg=cfg,
+                label2id=label2id,
+                id2label=id2label,
+                save_path=best_model_path
+            )
+            print(f"[INFO] best model 갱신: f1={best_f1:.4f}")
+
+    final_model_path = "/content/bert_globalpointer_ner_final.pt"
+    save_model_pt(
+        model=model,
+        cfg=cfg,
+        label2id=label2id,
+        id2label=id2label,
+        save_path=final_model_path
+    )
+
     return model, cfg, id2label
 
 
 # =========================================================
-# 19. 단일 샘플 예측
+# 21. 단일 샘플 예측
 #    Args:
 #        model: 학습된 모델
 #        cfg (Config): 설정 객체
@@ -898,7 +989,7 @@ def predict_from_sample(model, cfg, id2label, sample: Dict, threshold: float = 0
 
 
 # =========================================================
-# 20. 테스트셋 전체 예측 후 JSON 저장
+# 22. 테스트셋 전체 예측 후 JSON 저장
 #    Args:
 #        model: 학습된 모델
 #        cfg (Config): 설정 객체
@@ -920,9 +1011,61 @@ def predict_and_save_all_valid(model, cfg, id2label, output_path: str = "/conten
 
     print(f"[INFO] 예측 결과 저장 완료: {output_path}")
 
+# =========================================================
+# 23. 저장된 .pt 모델로 샘플 추론
+#    Args:
+#        pt_path (str): 저장된 모델(.pt) 파일 경로
+#        sample (Dict): 추론할 입력 샘플
+#            예: {
+#                "text": ...,
+#                "input_ids": [...],
+#                "attention_mask": [...],
+#                "token_type_ids": (optional)
+#            }
+#        device (str, optional): 실행 장치 (cuda 또는 cpu)
+#            - None이면 자동으로 GPU(cuda) 또는 CPU 선택
+#
+#    Returns:
+#        output (Dict): JSON 형태의 예측 결과
+#            - text
+#            - tokens
+#            - gold_entities
+#            - gold_bio_tags
+#            - raw_predictions
+#            - pred_bio_tags
+#            - confidence_scores
+#
+#    Notes:
+#        - load_model_pt()를 통해 모델과 label 정보를 함께 로드합니다.
+#        - checkpoint에 저장된 설정(pretrained_model_name, inner_dim, threshold)을 사용합니다.
+#        - predict_from_sample()로 raw prediction을 생성한 후
+#          build_prediction_output()으로 BIO 태그 및 JSON 구조로 변환합니다.
+# =========================================================
+@torch.no_grad()
+def predict_with_loaded_pt(pt_path: str, sample: Dict, device: str = None):
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    loaded_model, label2id, id2label, checkpoint = load_model_pt(pt_path, device=device)
+
+    temp_cfg = Config()
+    temp_cfg.device = device
+    temp_cfg.pretrained_model_name = checkpoint["pretrained_model_name"]
+    temp_cfg.inner_dim = checkpoint["inner_dim"]
+    temp_cfg.threshold = checkpoint["threshold"]
+
+    pred_entities = predict_from_sample(
+        model=loaded_model,
+        cfg=temp_cfg,
+        id2label=id2label,
+        sample=sample,
+        threshold=temp_cfg.threshold
+    )
+
+    return build_prediction_output(sample, pred_entities)
 
 # =========================================================
-# 21. 메인 실행부
+# 24. 메인 실행부
 #    - 모델 학습
 #    - valid 첫 샘플 예측 확인
 #    - test 전체 예측 후 JSON 저장
@@ -970,3 +1113,13 @@ if __name__ == "__main__":
         id2label=id2label,
         output_path="/content/valid_predictions_bio.jsonl"
     )
+
+    print("\n[INFO] 저장된 final pt 파일로 다시 로드해서 동일 샘플 추론 테스트")
+    loaded_output = predict_with_loaded_pt(
+        pt_path="/content/bert_globalpointer_ner_final.pt",
+        sample=test_sample,
+        device=cfg.device
+    )
+
+    print("\n[LOADED PT PRED BIO TAGS]")
+    print(loaded_output["pred_bio_tags"])
