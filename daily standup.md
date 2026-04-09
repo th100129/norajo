@@ -2,11 +2,11 @@
 
 ---
 
-## 📅 2026-04-08
+## 📅 2026-04-09
 
 ### 👤 진주용
-- Yesterday: GlobalPointer 모델 소스코드 로직 이해
-- Today: GlobalPointer 일반화 테스트
+- Yesterday: GlobalPointer .pt 파일 모듈 개발
+- Today: NER 발표 문서 작성 및 도움
 - Blocker:
 
 ---
